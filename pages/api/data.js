@@ -1,147 +1,84 @@
-import path from 'path';
-import * as XLSX from 'xlsx';
-import fs from 'fs';
+import { createClient } from '@supabase/supabase-js';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-
-function readExcel(filename) {
-  const filePath = path.join(DATA_DIR, filename);
-  if (!fs.existsSync(filePath)) return null;
-  const wb = XLSX.readFile(filePath);
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(ws);
-}
-
-function toNum(val) {
-  if (val === null || val === undefined || val === '') return null;
-  const n = Number(val);
-  return isNaN(n) ? null : n;
-}
-
-function toBool(val) {
-  if (typeof val === 'boolean') return val;
-  if (typeof val === 'string') return ['true', '1', 'yes', 'vrai'].includes(val.toLowerCase());
-  return Boolean(val);
-}
+const COMP_MAP = {
+  BENL: {
+    default: ['Vika', 'DSM Keukens', 'Dovy', 'Diapal'],
+    Badkamers: ['Groep Wouters', 'De Badbeke', 'X2O', 'Facq', 'Vanmarcke'],
+  },
+  BEFR: {
+    default: ['Dovy', 'Ixina', 'Vandenborre', 'DSM Cuisines'],
+    'Salle de bains': ['Sanijura', 'Mobalpa', 'X2O', 'Facq', 'Vanmarcke'],
+  },
+};
 
 function getPositionBucket(pos) {
-  if (pos === null || pos === undefined || isNaN(pos)) return 'Not ranked';
+  if (pos === null || pos === undefined) return 'Not ranked';
   if (pos <= 3) return 'Top 3';
   if (pos <= 10) return '4-10';
   if (pos <= 20) return '11-20';
   return '20+';
 }
 
-function processMarketBENL(rows, rowsBad) {
-  const compMap = {
-    default: ['Vika', 'DSM Keukens', 'Dovy', 'Diapal'],
-    Badkamers: ['Groep Wouters', 'De Badbeke', 'X2O', 'Facq', 'Vanmarcke'],
-  };
-
-  const badMap = {};
-  if (rowsBad) {
-    for (const r of rowsBad) {
-      const kw = (r.keyword || '').toLowerCase().trim();
-      badMap[kw] = {
-        'Groep Wouters': toNum(r['groepwouters.be_pos']),
-        'De Badbeke': toNum(r['debadbeke.be_pos']),
-        'X2O': toNum(r['x2o.be_pos']),
-        'Facq': toNum(r['facq.be_pos']),
-        'Vanmarcke': toNum(r['vanmarcke.com_pos']),
-      };
-    }
-  }
-
-  const data = rows.map((r) => {
-    const kw = (r.keyword || '').toLowerCase().trim();
-    const pos = toNum(r.client_pos ?? r.pos_dedecker);
-    const bad = badMap[kw] || {};
-    return {
-      keyword: r.keyword || '',
-      volume: toNum(r.volume) || 0,
-      category: (r.category || r.Category || 'Non catégorisé').toString().trim(),
-      cpc: toNum(r.cpc) || 0,
-      pos_dedecker: pos,
-      url_dedecker: r.client_url || r.url_dedecker || '',
-      has_ai: toBool(r.has_ai_overview ?? r.has_ai),
-      dedecker_in_ai: toBool(r.client_in_ai ?? r.dedecker_in_ai),
-      position_bucket: getPositionBucket(pos),
-      Vika: toNum(r['vika.be_pos']),
-      'DSM Keukens': toNum(r['dsmkeukens.be_pos']),
-      Dovy: toNum(r['dovykeukens.be_pos']),
-      Diapal: toNum(r['diapal.be_pos']),
-      Ilwa: toNum(r['ilwa.be_pos']),
-      ...bad,
-    };
-  });
-
-  return { data, compMap };
-}
-
-function processMarketBEFR(rows, rowsSdb) {
-  const compMap = {
-    default: ['Dovy', 'Ixina', 'Vandenborre', 'DSM Cuisines'],
-    'Salle de bains': ['Sanijura', 'Mobalpa', 'X2O', 'Facq', 'Vanmarcke'],
-  };
-
-  const sdbMap = {};
-  if (rowsSdb) {
-    for (const r of rowsSdb) {
-      const kw = (r.keyword || '').toLowerCase().trim();
-      sdbMap[kw] = {
-        Sanijura: toNum(r['sanijura.be_pos']),
-        Mobalpa: toNum(r['mobalpa.be_pos']),
-        X2O: toNum(r['x2o.be_pos']),
-        Facq: toNum(r['facq.be_pos']),
-        Vanmarcke: toNum(r['vanmarcke.com_pos']),
-      };
-    }
-  }
-
-  const data = rows.map((r) => {
-    const kw = (r.keyword || '').toLowerCase().trim();
-    const pos = toNum(r.client_pos ?? r.pos_dedecker);
-    const sdb = sdbMap[kw] || {};
-    return {
-      keyword: r.keyword || '',
-      volume: toNum(r.volume) || 0,
-      category: (r.category || r.Category || 'Non catégorisé').toString().trim(),
-      cpc: toNum(r.cpc) || 0,
-      pos_dedecker: pos,
-      url_dedecker: r.client_url || r.url_dedecker || '',
-      has_ai: toBool(r.has_ai_overview ?? r.has_ai),
-      dedecker_in_ai: toBool(r.client_in_ai ?? r.dedecker_in_ai),
-      position_bucket: getPositionBucket(pos),
-      Dovy: toNum(r['cuisinesdovy.be_pos']),
-      Ixina: toNum(r['ixina.be_pos']),
-      Vandenborre: toNum(r['vandenborrekitchen.be_pos']),
-      'DSM Cuisines': toNum(r['dsmcuisines.be_pos']),
-      ...sdb,
-    };
-  });
-
-  return { data, compMap };
-}
-
-export default function handler(req, res) {
+export default async function handler(req, res) {
   const { market = 'BENL' } = req.query;
+  const compMap = COMP_MAP[market] || COMP_MAP.BENL;
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
 
   try {
-    if (market === 'BENL') {
-      const rows = readExcel('Keyword_Research_DeDecker_BENL_FINAL.xlsx');
-      const rowsBad = readExcel('Keywords_SERP_Final_badkamers_dedecker.xlsx');
-      if (!rows) return res.status(404).json({ error: 'BENL data file not found' });
-      const result = processMarketBENL(rows, rowsBad);
-      return res.status(200).json(result);
-    } else {
-      const rows = readExcel('Keywords_SERP_Final_FR-Dedecker.xlsx');
-      const rowsSdb = readExcel('Keywords_SERP_Final_salle_de_bains.xlsx');
-      if (!rows) return res.status(404).json({ error: 'BEFR data file not found' });
-      const result = processMarketBEFR(rows, rowsSdb);
-      return res.status(200).json(result);
+    // 1. Fetch latest SERP data for the market
+    const { data: serpRows, error: serpErr } = await supabase
+      .from('latest_serp')
+      .select('*')
+      .eq('market', market);
+
+    if (serpErr) throw new Error(serpErr.message);
+    if (!serpRows || serpRows.length === 0) {
+      return res.status(200).json({ data: [], compMap });
     }
+
+    // 2. Fetch all competitor positions for these snapshots
+    const snapshotIds = serpRows.map((r) => r.snapshot_id);
+    const { data: compRows, error: compErr } = await supabase
+      .from('competitor_positions')
+      .select('snapshot_id, competitor_name, position')
+      .in('snapshot_id', snapshotIds);
+
+    if (compErr) throw new Error(compErr.message);
+
+    // 3. Build a map: snapshot_id → { competitor_name: position }
+    const compBySnapshot = {};
+    for (const c of compRows || []) {
+      if (!compBySnapshot[c.snapshot_id]) compBySnapshot[c.snapshot_id] = {};
+      compBySnapshot[c.snapshot_id][c.competitor_name] = c.position;
+    }
+
+    // 4. Merge and shape the response
+    const data = serpRows.map((r) => {
+      const pos = r.pos_dedecker;
+      const competitors = compBySnapshot[r.snapshot_id] || {};
+      return {
+        keyword: r.keyword,
+        volume: r.volume || 0,
+        category: r.category || 'Non catégorisé',
+        subcategory: r.subcategory || null,
+        cpc: r.cpc || 0,
+        pos_dedecker: pos,
+        url_dedecker: r.url_dedecker || '',
+        has_ai: r.has_ai || false,
+        dedecker_in_ai: r.dedecker_in_ai || false,
+        position_bucket: getPositionBucket(pos),
+        scan_date: r.scan_date,
+        ...competitors,
+      };
+    });
+
+    return res.status(200).json({ data, compMap });
   } catch (err) {
-    console.error(err);
+    console.error('Supabase error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 }
