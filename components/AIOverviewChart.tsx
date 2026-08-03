@@ -1,6 +1,9 @@
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
-function DonutChart({ title, data, colors }) {
+interface DonutChartProps { title: string; data: { name: string; value: number }[]; colors: string[]; }
+interface Row { keyword: string; volume?: number; category?: string; has_ai?: boolean; dedecker_in_ai?: boolean; pos_dedecker?: number | null; [key: string]: unknown; }
+
+function DonutChart({ title, data, colors }: DonutChartProps) {
   return (
     <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
       <h4 className="text-xs text-stone-500 font-medium mb-1">{title}</h4>
@@ -17,16 +20,16 @@ function DonutChart({ title, data, colors }) {
   );
 }
 
-export default function AIOverviewChart({ data }) {
+export default function AIOverviewChart({ data }: { data: Row[] }) {
   const total = data.length;
-  const withAI = data.filter((r) => r.has_ai).length;
+  const withAI = data.filter((r: Row) => r.has_ai).length;
   const withoutAI = total - withAI;
-  const inAI = data.filter((r) => r.dedecker_in_ai).length;
+  const inAI = data.filter((r: Row) => r.dedecker_in_ai).length;
   const notInAI = withAI - inAI;
 
   const aiKeywords = data
-    .filter((r) => r.has_ai)
-    .sort((a, b) => (b.volume || 0) - (a.volume || 0))
+    .filter((r: Row) => r.has_ai)
+    .sort((a: Row, b: Row) => (b.volume || 0) - (a.volume || 0))
     .slice(0, 50);
 
   return (
@@ -60,7 +63,7 @@ export default function AIOverviewChart({ data }) {
               </tr>
             </thead>
             <tbody>
-              {aiKeywords.map((r, i) => (
+              {aiKeywords.map((r: Row, i: number) => (
                 <tr key={i} className="border-b border-stone-50 hover:bg-stone-50">
                   <td className="py-1 px-1 truncate max-w-[140px]">{r.keyword}</td>
                   <td className="py-1 px-1">{(r.volume || 0).toLocaleString()}</td>

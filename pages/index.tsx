@@ -7,7 +7,7 @@ export default function Login() {
   const [error, setError] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (password === 'dedecker2026') {
       sessionStorage.setItem('auth', '1');

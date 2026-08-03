@@ -1,6 +1,9 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Row } from '@/lib/types';
 
-const BUCKET_COLORS = {
+interface CatEntry { category: string; 'Top 3': number; '4-10': number; '11-20': number; '20+': number; 'Not ranked': number; total: number; [key: string]: string | number; }
+
+const BUCKET_COLORS: Record<string, string> = {
   'Top 3': '#8B7355',
   '4-10': '#B8A99A',
   '11-20': '#D4C4B5',
@@ -9,25 +12,25 @@ const BUCKET_COLORS = {
 };
 const BUCKETS = ['Top 3', '4-10', '11-20', '20+', 'Not ranked'];
 
-export default function CategoryChart({ data }) {
-  const catMap = {};
+export default function CategoryChart({ data }: { data: Row[] }) {
+  const catMap: Record<string, CatEntry> = {};
   for (const row of data) {
     const cat = row.category || 'Other';
     if (!catMap[cat]) catMap[cat] = { category: cat, 'Top 3': 0, '4-10': 0, '11-20': 0, '20+': 0, 'Not ranked': 0, total: 0 };
-    catMap[cat][row.position_bucket] = (catMap[cat][row.position_bucket] || 0) + 1;
+    catMap[cat][row.position_bucket] = ((catMap[cat][row.position_bucket] as number) || 0) + 1;
     catMap[cat].total += 1;
   }
 
-  const chartData = Object.values(catMap).sort((a, b) => b.total - a.total);
+  const chartData = Object.values(catMap).sort((a: CatEntry, b: CatEntry) => b.total - a.total);
 
-  const tableData = chartData.map((c) => ({
+  const tableData = chartData.map((c: CatEntry) => ({
     Category: c.category,
     Keywords: c.total,
     Volume: data.filter((r) => r.category === c.category).reduce((s, r) => s + (r.volume || 0), 0),
     'Top 10': (c['Top 3'] || 0) + (c['4-10'] || 0),
     'Not Ranked': c['Not ranked'] || 0,
     'Avg Pos': (() => {
-      const rows = data.filter((r) => r.category === c.category);
+      const rows = data.filter((r: Row) => r.category === c.category);
       const avg = rows.reduce((s, r) => s + (r.pos_dedecker != null ? r.pos_dedecker : 100), 0) / rows.length;
       return avg.toFixed(1);
     })(),
@@ -60,7 +63,7 @@ export default function CategoryChart({ data }) {
             </tr>
           </thead>
           <tbody>
-            {tableData.sort((a, b) => b.Volume - a.Volume).map((row, i) => (
+            {tableData.sort((a, b) => (b.Volume as number) - (a.Volume as number)).map((row, i) => (
               <tr key={i} className="border-b border-stone-50 hover:bg-stone-50">
                 <td className="py-1.5 px-1 font-medium">{row.Category}</td>
                 <td className="py-1.5 px-1">{row.Keywords}</td>

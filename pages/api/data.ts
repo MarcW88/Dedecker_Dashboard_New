@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
-const COMP_MAP = {
+type CompMapType = Record<string, Record<string, string[]>>;
+const COMP_MAP: CompMapType = {
   BENL: {
     default: ['Vika', 'DSM Keukens', 'Dovy', 'Diapal'],
     Badkamers: ['Groep Wouters', 'De Badbeke', 'X2O', 'Facq', 'Vanmarcke'],
@@ -11,7 +13,7 @@ const COMP_MAP = {
   },
 };
 
-function getPositionBucket(pos) {
+function getPositionBucket(pos: number | null | undefined): string {
   if (pos === null || pos === undefined) return 'Not ranked';
   if (pos <= 3) return 'Top 3';
   if (pos <= 10) return '4-10';
@@ -19,13 +21,14 @@ function getPositionBucket(pos) {
   return '20+';
 }
 
-export default async function handler(req, res) {
-  const { market = 'BENL' } = req.query;
-  const compMap = COMP_MAP[market] || COMP_MAP.BENL;
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const marketParam = Array.isArray(req.query.market) ? req.query.market[0] : (req.query.market ?? 'BENL');
+  const market = (marketParam as string);
+  const compMap = COMP_MAP[market] || COMP_MAP['BENL'];
 
   const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
   try {
@@ -50,7 +53,7 @@ export default async function handler(req, res) {
     if (compErr) throw new Error(compErr.message);
 
     // 3. Build a map: snapshot_id → { competitor_name: position }
-    const compBySnapshot = {};
+    const compBySnapshot: Record<number, Record<string, number | null>> = {};
     for (const c of compRows || []) {
       if (!compBySnapshot[c.snapshot_id]) compBySnapshot[c.snapshot_id] = {};
       compBySnapshot[c.snapshot_id][c.competitor_name] = c.position;
@@ -58,8 +61,8 @@ export default async function handler(req, res) {
 
     // 4. Merge and shape the response
     const data = serpRows.map((r) => {
-      const pos = r.pos_dedecker;
-      const competitors = compBySnapshot[r.snapshot_id] || {};
+      const pos = r.pos_dedecker as number | null;
+      const competitors = compBySnapshot[r.snapshot_id as number] || {};
       return {
         keyword: r.keyword,
         volume: r.volume || 0,
@@ -78,7 +81,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ data, compMap });
   } catch (err) {
-    console.error('Supabase error:', err.message);
-    return res.status(500).json({ error: err.message });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('Supabase error:', msg);
+    return res.status(500).json({ error: msg });
   }
 }

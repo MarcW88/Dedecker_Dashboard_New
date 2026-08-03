@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
+import { Row, CompMap } from '@/lib/types';
 
-function posStyle(val) {
+function posStyle(val: number | null | undefined | unknown): string {
   if (val === null || val === undefined || isNaN(Number(val))) return 'bg-stone-100 text-stone-400';
   const n = Number(val);
   if (n <= 3) return 'bg-green-100 text-green-700';
@@ -10,7 +11,7 @@ function posStyle(val) {
   return 'bg-red-50 text-red-400';
 }
 
-export default function KeywordTable({ data, compMap }) {
+export default function KeywordTable({ data, compMap }: { data: Row[]; compMap: CompMap }) {
   const [search, setSearch] = useState('');
   const [filterBucket, setFilterBucket] = useState('All');
   const [filterAI, setFilterAI] = useState('All');
@@ -18,10 +19,10 @@ export default function KeywordTable({ data, compMap }) {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
-  const categories = useMemo(() => ['All', ...new Set(data.map((r) => r.category).filter(Boolean))].sort(), [data]);
+  const categories = useMemo(() => ['All', ...new Set(data.map((r) => r.category).filter(Boolean))].sort() as string[], [data]);
   const allComp = useMemo(() => [
     ...(compMap.default || []),
-    ...Object.entries(compMap).filter(([k]) => k !== 'default').flatMap(([, v]) => v),
+    ...Object.entries(compMap).filter(([k]) => k !== 'default').flatMap(([, v]) => v as string[]),
   ].filter((v, i, a) => a.indexOf(v) === i), [compMap]);
 
   const filtered = useMemo(() => {
@@ -60,9 +61,9 @@ export default function KeywordTable({ data, compMap }) {
           className="border border-stone-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-taupe w-48"
         />
         {[
-          { label: 'Position', value: filterBucket, set: (v) => { setFilterBucket(v); setPage(0); }, opts: ['All', 'Top 3', '4-10', '11-20', '20+', 'Not ranked'] },
-          { label: 'Category', value: filterCat, set: (v) => { setFilterCat(v); setPage(0); }, opts: categories },
-          { label: 'AI', value: filterAI, set: (v) => { setFilterAI(v); setPage(0); }, opts: ['All', 'With AI Overview', 'DeDecker in AI', 'AI Gap'] },
+          { label: 'Position', value: filterBucket, set: (v: string) => { setFilterBucket(v); setPage(0); }, opts: ['All', 'Top 3', '4-10', '11-20', '20+', 'Not ranked'] },
+          { label: 'Category', value: filterCat, set: (v: string) => { setFilterCat(v); setPage(0); }, opts: categories },
+          { label: 'AI', value: filterAI, set: (v: string) => { setFilterAI(v); setPage(0); }, opts: ['All', 'With AI Overview', 'DeDecker in AI', 'AI Gap'] },
         ].map((f) => (
           <select key={f.label} value={f.value} onChange={(e) => f.set(e.target.value)}
             className="border border-stone-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-taupe bg-white">
@@ -95,7 +96,7 @@ export default function KeywordTable({ data, compMap }) {
                 {allComp.map((c) => (
                   <td key={c} className="py-2 px-3">
                     <span className={`px-2 py-0.5 rounded text-xs ${posStyle(r[c])}`}>
-                      {r[c] ?? '—'}
+                      {(r[c] as string | number | null) ?? '—'}
                     </span>
                   </td>
                 ))}

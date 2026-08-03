@@ -2,8 +2,9 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   CartesianGrid, LabelList,
 } from 'recharts';
+import { Row, CompMap } from '@/lib/types';
 
-const COLOR_MAP = {
+const COLOR_MAP: Record<string, string> = {
   DeDecker: '#8B7355',
   Vika: '#C4956A', 'DSM Keukens': '#D4A87C', Dovy: '#B07D56',
   Diapal: '#D9B99B', Ixina: '#C48B5C', Vandenborre: '#DDB892',
@@ -13,25 +14,25 @@ const COLOR_MAP = {
   Sanijura: '#4E8FA0', Mobalpa: '#72B5C8',
 };
 
-export default function CompetitorChart({ data, compMap }) {
+export default function CompetitorChart({ data, compMap }: { data: Row[]; compMap: CompMap }) {
   const total = data.length;
   const allComp = [
     ...(compMap.default || []),
-    ...Object.entries(compMap).filter(([k]) => k !== 'default').flatMap(([, v]) => v),
+    ...Object.entries(compMap).filter(([k]) => k !== 'default').flatMap(([, v]) => v as string[]),
   ].filter((v, i, a) => a.indexOf(v) === i);
 
   const visRows = [
     {
       name: 'DeDecker',
       Ranked: data.filter((r) => r.pos_dedecker != null).length,
-      'Top 20': data.filter((r) => r.pos_dedecker <= 20).length,
-      'Top 10': data.filter((r) => r.pos_dedecker <= 10).length,
+      'Top 20': data.filter((r) => r.pos_dedecker != null && r.pos_dedecker <= 20).length,
+      'Top 10': data.filter((r) => r.pos_dedecker != null && r.pos_dedecker <= 10).length,
     },
     ...allComp.map((c) => ({
       name: c,
       Ranked: data.filter((r) => r[c] != null).length,
-      'Top 20': data.filter((r) => r[c] <= 20).length,
-      'Top 10': data.filter((r) => r[c] <= 10).length,
+      'Top 20': data.filter((r) => (r[c] as number) <= 20).length,
+      'Top 10': data.filter((r) => (r[c] as number) <= 10).length,
     })),
   ].sort((a, b) => b.Ranked - a.Ranked);
 

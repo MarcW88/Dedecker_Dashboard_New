@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { Row, CompMap } from '../lib/types';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import KPICards from '../components/KPICards';
@@ -12,10 +13,10 @@ const BRANDING_CATS = new Set(['Branding', 'Marque et valeurs']);
 export default function Dashboard() {
   const router = useRouter();
   const [market, setMarket] = useState('BENL');
-  const [rawData, setRawData] = useState(null);
-  const [compMap, setCompMap] = useState({ default: [] });
+  const [rawData, setRawData] = useState<Row[] | null>(null);
+  const [compMap, setCompMap] = useState<CompMap>({ default: [] });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [globalCat, setGlobalCat] = useState('All');
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export default function Dashboard() {
         {/* Header */}
         <div className="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
           <div className="flex items-center gap-4">
-            <img src="/dedecker-logo.png" alt="DeDecker" className="h-9" onError={(e) => { e.target.style.display = 'none'; }} />
+            <img src="/dedecker-logo.png" alt="DeDecker" className="h-9" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             <div>
               <h1 className="text-base font-semibold text-dedecker-dark leading-tight">DeDecker Keukens — Semantic Analysis</h1>
               <p className="text-xs text-stone-400">

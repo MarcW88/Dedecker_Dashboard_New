@@ -1,9 +1,11 @@
-export default function KPICards({ data }) {
+import { Row } from '@/lib/types';
+
+export default function KPICards({ data }: { data: Row[] }) {
   const total = data.length;
   const totalVolume = data.reduce((s, r) => s + (r.volume || 0), 0);
   const ranked = data.filter((r) => r.pos_dedecker !== null && r.pos_dedecker !== undefined).length;
-  const top10 = data.filter((r) => r.pos_dedecker <= 10).length;
-  const top3 = data.filter((r) => r.pos_dedecker <= 3).length;
+  const top10 = data.filter((r) => r.pos_dedecker != null && r.pos_dedecker <= 10).length;
+  const top3 = data.filter((r) => r.pos_dedecker != null && r.pos_dedecker <= 3).length;
   const avgPos = ranked
     ? (data.reduce((s, r) => s + (r.pos_dedecker != null ? r.pos_dedecker : 100), 0) / total).toFixed(1)
     : 'N/A';
