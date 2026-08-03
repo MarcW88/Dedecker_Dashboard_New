@@ -26,25 +26,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const market = (marketParam as string);
   const compMap = COMP_MAP[market] || COMP_MAP['BENL'];
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return res.status(500).json({ error: 'Supabase environment variables are not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel.' });
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // Optional: specific date for historical view
+  const dateParam = Array.isArray(req.query.date) ? req.query.date[0] : req.query.date;
 
   try {
-    // 1. Fetch latest SERP data for the market
-    const { data: serpRows, error: serpErr } = await supabase
-      .from('latest_serp')
-      .select('*')
-      .eq('market', market);
+    // 1. Fetch SERP data — specific date or latest
+    let serpQuery = supabase
+      .from(dateParam ? 'serp_snapshots' : 'latest_serp')
+      .select(dateParam
+        ? 'id, scan_date, pos_dedecker, url_dedecker, has_ai, dedecker_in_ai, keywords!inner(keyword, market, volume, category, subcategory, cpc)'
+        : '*'
+      );
+
+    if (dateParam) {
+      serpQuery = serpQuery.eq('scan_date', dateParam).eq('keywords.market', market);
+    } else {
+      serpQuery = serpQuery.eq('market', market);
+    }
+
+    const { data: rawRows, error: serpErr } = await serpQuery;
 
     if (serpErr) throw new Error(serpErr.message);
-    if (!serpRows || serpRows.length === 0) {
+    if (!rawRows || rawRows.length === 0) {
       return res.status(200).json({ data: [], compMap });
     }
 
+    // Normalize rows for both date-specific and latest_serp queries
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const serpRows = rawRows.map((r: any) => {
+      if (dateParam && r.keywords) {
+        const kw = r.keywords;
+        return { ...kw, snapshot_id: r.id, scan_date: r.scan_date, pos_dedecker: r.pos_dedecker, url_dedecker: r.url_dedecker, has_ai: r.has_ai, dedecker_in_ai: r.dedecker_in_ai };
+      }
+      return r;
+    });
+
     // 2. Fetch all competitor positions for these snapshots
-    const snapshotIds = serpRows.map((r) => r.snapshot_id);
+    const snapshotIds = serpRows.map((r: any) => r.snapshot_id || r.id);
     const { data: compRows, error: compErr } = await supabase
       .from('competitor_positions')
       .select('snapshot_id, competitor_name, position')
@@ -60,9 +87,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 4. Merge and shape the response
-    const data = serpRows.map((r) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = serpRows.map((r: any) => {
       const pos = r.pos_dedecker as number | null;
-      const competitors = compBySnapshot[r.snapshot_id as number] || {};
+      const snapshotId = r.snapshot_id || r.id;
+      const competitors = compBySnapshot[snapshotId as number] || {};
       return {
         keyword: r.keyword,
         volume: r.volume || 0,

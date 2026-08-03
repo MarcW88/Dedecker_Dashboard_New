@@ -18,6 +18,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [globalCat, setGlobalCat] = useState('All');
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>('');
 
   useEffect(() => {
     if (typeof window !== 'undefined' && sessionStorage.getItem('auth') !== '1') {
@@ -25,11 +27,24 @@ export default function Dashboard() {
     }
   }, [router]);
 
+  // Fetch available scan dates when market changes
+  useEffect(() => {
+    fetch(`/api/dates?market=${market}`)
+      .then((r) => r.json())
+      .then((json) => {
+        const dates: string[] = json.dates || [];
+        setAvailableDates(dates);
+        setSelectedDate(dates[0] || '');
+      })
+      .catch(() => setAvailableDates([]));
+  }, [market]);
+
   useEffect(() => {
     setLoading(true);
     setError(null);
     setGlobalCat('All');
-    fetch(`/api/data?market=${market}`)
+    const dateQuery = selectedDate ? `&date=${selectedDate}` : '';
+    fetch(`/api/data?market=${market}${dateQuery}`)
       .then((r) => r.json())
       .then((json) => {
         if (json.error) { setError(json.error); setLoading(false); return; }
@@ -38,7 +53,7 @@ export default function Dashboard() {
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
-  }, [market]);
+  }, [market, selectedDate]);
 
   const categories = useMemo(() => {
     if (!rawData) return [];
@@ -70,6 +85,22 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {availableDates.length > 1 && (
+              <select
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="border border-stone-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-taupe"
+              >
+                {availableDates.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            )}
+            {availableDates.length === 1 && (
+              <span className="text-xs text-stone-400 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200">
+                📅 {selectedDate}
+              </span>
+            )}
             <select
               value={market}
               onChange={(e) => setMarket(e.target.value)}
@@ -115,7 +146,7 @@ export default function Dashboard() {
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-600 mb-4">
               <strong>Error:</strong> {error}
               <p className="text-xs mt-1 text-red-400">
-                Make sure the Excel files are placed in the <code>/data/</code> folder.
+                Check that NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in Vercel Environment Variables.
               </p>
             </div>
           )}
