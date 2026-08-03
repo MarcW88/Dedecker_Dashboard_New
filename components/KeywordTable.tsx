@@ -1,6 +1,13 @@
 import { useState, useMemo } from 'react';
 import { Row, CompMap } from '@/lib/types';
 
+function DeltaBadge({ delta }: { delta: number | null | undefined }) {
+  if (delta == null) return <span className="text-stone-300">—</span>;
+  if (delta === 0) return <span className="text-stone-400 text-xs">=</span>;
+  if (delta > 0) return <span className="text-green-600 text-xs font-medium">▲{delta}</span>;
+  return <span className="text-red-400 text-xs font-medium">▼{Math.abs(delta)}</span>;
+}
+
 function posStyle(val: number | null | undefined | unknown): string {
   if (val === null || val === undefined || isNaN(Number(val))) return 'bg-stone-100 text-stone-400';
   const n = Number(val);
@@ -11,7 +18,7 @@ function posStyle(val: number | null | undefined | unknown): string {
   return 'bg-red-50 text-red-400';
 }
 
-export default function KeywordTable({ data, compMap }: { data: Row[]; compMap: CompMap }) {
+export default function KeywordTable({ data, compMap, prevDate }: { data: Row[]; compMap: CompMap; prevDate?: string | null }) {
   const [search, setSearch] = useState('');
   const [filterBucket, setFilterBucket] = useState('All');
   const [filterAI, setFilterAI] = useState('All');
@@ -77,7 +84,7 @@ export default function KeywordTable({ data, compMap }: { data: Row[]; compMap: 
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-stone-100 bg-stone-50">
-              {['Keyword', 'Vol', 'Category', 'DeDecker', ...allComp, 'AI', 'In AI'].map((h) => (
+              {['Keyword', 'Vol', 'Category', 'DeDecker', ...(prevDate ? ['vs prev'] : []), ...allComp, 'AI', 'In AI'].map((h) => (
                 <th key={h} className="text-left py-2.5 px-3 text-stone-500 font-medium whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -93,6 +100,11 @@ export default function KeywordTable({ data, compMap }: { data: Row[]; compMap: 
                     {r.pos_dedecker ?? '—'}
                   </span>
                 </td>
+                {prevDate && (
+                  <td className="py-2 px-3 text-center">
+                    <DeltaBadge delta={r.delta as number | null} />
+                  </td>
+                )}
                 {allComp.map((c) => (
                   <td key={c} className="py-2 px-3">
                     <span className={`px-2 py-0.5 rounded text-xs ${posStyle(r[c])}`}>

@@ -10,6 +10,8 @@ export interface Row {
   dedecker_in_ai: boolean;
   position_bucket: string;
   scan_date?: string;
+  pos_prev?: number | null;
+  delta?: number | null;
   [key: string]: unknown;
 }
 

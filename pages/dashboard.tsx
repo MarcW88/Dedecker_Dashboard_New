@@ -20,6 +20,7 @@ export default function Dashboard() {
   const [globalCat, setGlobalCat] = useState('All');
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [prevDate, setPrevDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && sessionStorage.getItem('auth') !== '1') {
@@ -50,6 +51,7 @@ export default function Dashboard() {
         if (json.error) { setError(json.error); setLoading(false); return; }
         setRawData(json.data);
         setCompMap(json.compMap);
+        setPrevDate(json.prevDate || null);
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
@@ -157,7 +159,7 @@ export default function Dashboard() {
               <CategoryChart data={filteredData} />
               <CompetitorChart data={filteredData} compMap={compMap} />
               <AIOverviewChart data={filteredData} />
-              <KeywordTable data={filteredData} compMap={compMap} />
+              <KeywordTable data={filteredData} compMap={compMap} prevDate={prevDate} />
             </>
           )}
         </div>

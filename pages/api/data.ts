@@ -108,7 +108,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     });
 
-    return res.status(200).json({ data, compMap });
+    // 5. Fetch previous scan date for comparison (if exists)
+    const { data: allDates } = await supabase
+      .from('serp_snapshots')
+      .select('scan_date, keywords!inner(market)')
+      .eq('keywords.market', market)
+      .order('scan_date', { ascending: false });
+
+    const uniqueDates = [...new Set((allDates || []).map((r: { scan_date: string }) => r.scan_date))];
+    const currentDate = uniqueDates[0];
+    const prevDate = uniqueDates[1] || null;
+
+    let prevByKeyword: Record<string, number | null> = {};
+    if (prevDate) {
+      const { data: prevRows } = await supabase
+        .from('serp_snapshots')
+        .select('pos_dedecker, keywords!inner(keyword, market)')
+        .eq('scan_date', prevDate)
+        .eq('keywords.market', market);
+
+      for (const r of prevRows || []) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const keyword = (r as any).keywords?.keyword;
+        if (keyword) prevByKeyword[keyword] = r.pos_dedecker;
+      }
+    }
+
+    // 6. Add delta to each row
+    const dataWithDelta = data.map((row) => {
+      const posPrev = prevByKeyword[row.keyword] ?? null;
+      const delta = row.pos_dedecker != null && posPrev != null
+        ? posPrev - row.pos_dedecker  // positive = improved (lower rank number)
+        : null;
+      return { ...row, pos_prev: posPrev, delta };
+    });
+
+    return res.status(200).json({ data: dataWithDelta, compMap, scanDate: currentDate, prevDate });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('Supabase error:', msg);
