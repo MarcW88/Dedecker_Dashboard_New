@@ -131,7 +131,7 @@ export default function Dashboard() {
         </div>
 
         <footer className="text-center text-xs text-stone-400 py-4 border-t border-stone-100">
-          DeDecker Keukens · Semantic Analysis · 2026
+          DeDecker Keukens · Semantic Analysis Dashboard · 2026
         </footer>
       </div>
     </>
