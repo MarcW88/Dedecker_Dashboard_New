@@ -1,6 +1,6 @@
 import { Row } from '@/lib/types';
 
-export default function KPICards({ data }: { data: Row[] }) {
+export default function KPICards({ data, fromDate, toDate }: { data: Row[]; fromDate?: string; toDate?: string }) {
   const total = data.length;
   const totalVolume = data.reduce((s, r) => s + (r.volume || 0), 0);
   const ranked = data.filter((r) => r.pos_dedecker !== null && r.pos_dedecker !== undefined).length;

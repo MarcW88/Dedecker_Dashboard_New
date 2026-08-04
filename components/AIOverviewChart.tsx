@@ -20,7 +20,7 @@ function DonutChart({ title, data, colors }: DonutChartProps) {
   );
 }
 
-export default function AIOverviewChart({ data }: { data: Row[] }) {
+export default function AIOverviewChart({ data, fromDate, toDate }: { data: Row[]; fromDate?: string; toDate?: string }) {
   const total = data.length;
   const withAI = data.filter((r: Row) => r.has_ai).length;
   const withoutAI = total - withAI;

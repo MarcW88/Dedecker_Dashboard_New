@@ -176,6 +176,12 @@ def run_market(market: str, supabase, scan_date: str, dry_run: bool = False):
         print("⚠️  No keywords found, skipping.")
         return
 
+    # 1b. Skip keywords already scanned today
+    already = supabase.table("serp_snapshots").select("keyword_id").eq("scan_date", scan_date).execute()
+    done_ids = {r["keyword_id"] for r in already.data or []}
+    keywords = [k for k in keywords if k["id"] not in done_ids]
+    print(f"⏭️  {len(done_ids)} already scanned for {scan_date}, {len(keywords)} remaining")
+
     total = len(keywords)
     for i, kw_row in enumerate(keywords, 1):
         keyword = kw_row["keyword"]
@@ -188,7 +194,7 @@ def run_market(market: str, supabase, scan_date: str, dry_run: bool = False):
             continue
 
         serp = analyze_serp(keyword, market_cfg)
-        time.sleep(1.2)  # Rate limiting
+
 
         if dry_run:
             continue
@@ -213,10 +219,13 @@ def run_market(market: str, supabase, scan_date: str, dry_run: bool = False):
             ]
             supabase.table("competitor_positions").insert(comp_rows).execute()
 
+        progress = f"{i}/{total}"
         if serp["client_pos"]:
-            print(f"        ✓ DeDecker: pos {serp['client_pos']} | AI: {serp['has_ai']} | Comps: {len(serp['competitors'])}")
+            print(f"[{progress:>8}] ✓ DeDecker: pos {serp['client_pos']} | AI: {serp['has_ai']} | {serp['client_url'][:60]}")
         else:
-            print(f"        – Not ranked | AI: {serp['has_ai']}")
+            print(f"[{progress:>8}] – Not ranked | AI: {serp['has_ai']}")
+
+        time.sleep(0.1)
 
     print(f"\n✅ {market} done — {total} keywords written to Supabase for {scan_date}")
 

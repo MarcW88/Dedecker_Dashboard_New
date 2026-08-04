@@ -14,12 +14,21 @@ const COLOR_MAP: Record<string, string> = {
   Sanijura: '#4E8FA0', Mobalpa: '#72B5C8',
 };
 
-export default function CompetitorChart({ data, compMap }: { data: Row[]; compMap: CompMap }) {
+function DeltaCell({ delta }: { delta: number | null }) {
+  if (delta == null) return <span className="text-stone-300">—</span>;
+  if (delta === 0) return <span className="text-stone-400 text-[10px]">=</span>;
+  if (delta > 0) return <span className="text-green-600 text-[10px] font-medium">▲{delta}</span>;
+  return <span className="text-red-400 text-[10px] font-medium">▼{Math.abs(delta)}</span>;
+}
+
+export default function CompetitorChart({ data, compMap, fromDate, toDate }: { data: Row[]; compMap: CompMap; fromDate?: string; toDate?: string }) {
   const total = data.length;
   const allComp = [
     ...(compMap.default || []),
     ...Object.entries(compMap).filter(([k]) => k !== 'default').flatMap(([, v]) => v as string[]),
   ].filter((v, i, a) => a.indexOf(v) === i);
+
+  const compare = fromDate !== toDate && fromDate != null && toDate != null;
 
   const visRows = [
     {
@@ -27,13 +36,33 @@ export default function CompetitorChart({ data, compMap }: { data: Row[]; compMa
       Ranked: data.filter((r) => r.pos_dedecker != null).length,
       'Top 20': data.filter((r) => r.pos_dedecker != null && r.pos_dedecker <= 20).length,
       'Top 10': data.filter((r) => r.pos_dedecker != null && r.pos_dedecker <= 10).length,
+      'Avg Pos': data.filter((r) => r.pos_dedecker != null).length > 0
+        ? data.reduce((s, r) => s + (r.pos_dedecker != null ? r.pos_dedecker : 0), 0) / data.filter((r) => r.pos_dedecker != null).length
+        : 0,
+      deltaRanked: compare
+        ? data.filter((r) => r.pos_dedecker != null).length - data.filter((r) => r.pos_prev != null).length
+        : null,
+      deltaTop10: compare
+        ? data.filter((r) => r.pos_dedecker != null && r.pos_dedecker <= 10).length - data.filter((r) => r.pos_prev != null && r.pos_prev <= 10).length
+        : null,
     },
-    ...allComp.map((c) => ({
-      name: c,
-      Ranked: data.filter((r) => r[c] != null).length,
-      'Top 20': data.filter((r) => (r[c] as number) <= 20).length,
-      'Top 10': data.filter((r) => (r[c] as number) <= 10).length,
-    })),
+    ...allComp.map((c) => {
+      const curRanked = data.filter((r) => r[c] != null).length;
+      const prevRanked = compare ? data.filter((r) => (r as Record<string, unknown>)[`${c}_prev`] != null).length : curRanked;
+      return {
+        name: c,
+        Ranked: curRanked,
+        'Top 20': data.filter((r) => (r[c] as number) <= 20).length,
+        'Top 10': data.filter((r) => (r[c] as number) <= 10).length,
+        'Avg Pos': data.filter((r) => r[c] != null).length > 0
+          ? data.reduce((s, r) => s + ((r[c] as number | null) ?? 0), 0) / data.filter((r) => r[c] != null).length
+          : 0,
+        deltaRanked: compare ? curRanked - prevRanked : null,
+        deltaTop10: compare
+          ? data.filter((r) => (r[c] as number) <= 10).length - data.filter((r) => ((r as Record<string, unknown>)[`${c}_prev`] as number | null) != null && ((r as Record<string, unknown>)[`${c}_prev`] as number) <= 10).length
+          : null,
+      };
+    }),
   ].sort((a, b) => b.Ranked - a.Ranked);
 
   return (
@@ -59,12 +88,14 @@ export default function CompetitorChart({ data, compMap }: { data: Row[]; compMa
         </div>
 
         <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm overflow-auto">
-          <h4 className="text-xs text-stone-500 font-medium mb-2">Summary</h4>
+          <h4 className="text-xs text-stone-500 font-medium mb-2">
+            {compare ? `Summary — ${fromDate} → ${toDate}` : 'Summary'}
+          </h4>
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-stone-100">
-                {['Competitor', `Ranked / ${total}`, 'Ranked %', `Top 10 / ${total}`, 'Top 10 %'].map((h) => (
-                  <th key={h} className="text-left py-2 px-2 text-stone-500 font-medium">{h}</th>
+                {['Competitor', `Ranked / ${total}`, compare ? 'Δ' : '', 'Ranked %', `Top 10 / ${total}`, compare ? 'Δ' : '', 'Avg Pos'].filter(Boolean).map((h, i) => (
+                  <th key={`${h}-${i}`} className="text-left py-2 px-2 text-stone-500 font-medium">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -76,9 +107,19 @@ export default function CompetitorChart({ data, compMap }: { data: Row[]; compMa
                     {r.name}
                   </td>
                   <td className="py-1.5 px-2">{r.Ranked}</td>
+                  {compare && (
+                    <td className="py-1.5 px-2">
+                      <DeltaCell delta={r.deltaRanked as number | null} />
+                    </td>
+                  )}
                   <td className="py-1.5 px-2">{((r.Ranked / total) * 100).toFixed(1)}%</td>
                   <td className="py-1.5 px-2">{r['Top 10']}</td>
-                  <td className="py-1.5 px-2">{((r['Top 10'] / total) * 100).toFixed(1)}%</td>
+                  {compare && (
+                    <td className="py-1.5 px-2">
+                      <DeltaCell delta={r.deltaTop10 as number | null} />
+                    </td>
+                  )}
+                  <td className="py-1.5 px-2">{r['Avg Pos'] ? (r['Avg Pos'] as number).toFixed(1) : '—'}</td>
                 </tr>
               ))}
             </tbody>

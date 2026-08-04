@@ -12,7 +12,7 @@ const BUCKET_COLORS: Record<string, string> = {
 };
 const BUCKETS = ['Top 3', '4-10', '11-20', '20+', 'Not ranked'];
 
-export default function CategoryChart({ data }: { data: Row[] }) {
+export default function CategoryChart({ data, fromDate, toDate }: { data: Row[]; fromDate?: string; toDate?: string }) {
   const catMap: Record<string, CatEntry> = {};
   for (const row of data) {
     const cat = row.category || 'Other';

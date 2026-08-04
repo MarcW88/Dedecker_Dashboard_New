@@ -21,6 +21,11 @@ function getPositionBucket(pos: number | null | undefined): string {
   return '20+';
 }
 
+function calcDelta(current: number | null, previous: number | null): number | null {
+  if (current == null || previous == null) return null;
+  return previous - current; // positive = improved (rank number got smaller)
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const marketParam = Array.isArray(req.query.market) ? req.query.market[0] : (req.query.market ?? 'BENL');
   const market = (marketParam as string);
@@ -35,20 +40,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  // Optional: specific date for historical view
-  const dateParam = Array.isArray(req.query.date) ? req.query.date[0] : req.query.date;
+  // Date selection: explicit to/from or legacy single date
+  const toParam = Array.isArray(req.query.to) ? req.query.to[0] : (req.query.to as string | undefined);
+  const fromParam = Array.isArray(req.query.from) ? req.query.from[0] : (req.query.from as string | undefined);
+  const legacyDateParam = Array.isArray(req.query.date) ? req.query.date[0] : (req.query.date as string | undefined);
+
+  const toDate = toParam || legacyDateParam;
 
   try {
-    // 1. Fetch SERP data — specific date or latest
+    // 1. Fetch target (to) SERP data
     let serpQuery = supabase
-      .from(dateParam ? 'serp_snapshots' : 'latest_serp')
-      .select(dateParam
+      .from(toDate ? 'serp_snapshots' : 'latest_serp')
+      .select(toDate
         ? 'id, scan_date, pos_dedecker, url_dedecker, has_ai, dedecker_in_ai, keywords!inner(keyword, market, volume, category, subcategory, cpc)'
         : '*'
       );
 
-    if (dateParam) {
-      serpQuery = serpQuery.eq('scan_date', dateParam).eq('keywords.market', market);
+    if (toDate) {
+      serpQuery = serpQuery.eq('scan_date', toDate).eq('keywords.market', market);
     } else {
       serpQuery = serpQuery.eq('market', market);
     }
@@ -60,39 +69,90 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ data: [], compMap });
     }
 
-    // Normalize rows for both date-specific and latest_serp queries
+    // Normalize rows
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const serpRows = rawRows.map((r: any) => {
-      if (dateParam && r.keywords) {
+      if (toDate && r.keywords) {
         const kw = r.keywords;
         return { ...kw, snapshot_id: r.id, scan_date: r.scan_date, pos_dedecker: r.pos_dedecker, url_dedecker: r.url_dedecker, has_ai: r.has_ai, dedecker_in_ai: r.dedecker_in_ai };
       }
       return r;
     });
 
-    // 2. Fetch all competitor positions for these snapshots
-    const snapshotIds = serpRows.map((r: any) => r.snapshot_id || r.id);
+    const toSnapshotIds = serpRows.map((r: any) => r.snapshot_id || r.id);
+
+    // 2. Target competitor positions
     const { data: compRows, error: compErr } = await supabase
       .from('competitor_positions')
       .select('snapshot_id, competitor_name, position')
-      .in('snapshot_id', snapshotIds);
+      .in('snapshot_id', toSnapshotIds);
 
     if (compErr) throw new Error(compErr.message);
 
-    // 3. Build a map: snapshot_id → { competitor_name: position }
     const compBySnapshot: Record<number, Record<string, number | null>> = {};
     for (const c of compRows || []) {
       if (!compBySnapshot[c.snapshot_id]) compBySnapshot[c.snapshot_id] = {};
       compBySnapshot[c.snapshot_id][c.competitor_name] = c.position;
     }
 
-    // 4. Merge and shape the response
+    // 3. Determine comparison (from) date
+    let fromDate = fromParam || null;
+    if (!fromDate && toDate) {
+      const { data: allDates } = await supabase
+        .from('serp_snapshots')
+        .select('scan_date, keywords!inner(market)')
+        .eq('keywords.market', market)
+        .lt('scan_date', toDate)
+        .order('scan_date', { ascending: false });
+
+      const uniqueDates = [...new Set((allDates || []).map((r: { scan_date: string }) => r.scan_date))];
+      fromDate = uniqueDates[0] || null;
+    }
+
+    // 4. Fetch previous (from) SERP data
+    let fromByKeyword: Record<string, any> = {};
+    if (fromDate) {
+      const { data: prevRows } = await supabase
+        .from('serp_snapshots')
+        .select('id, scan_date, pos_dedecker, has_ai, dedecker_in_ai, keywords!inner(keyword, market)')
+        .eq('scan_date', fromDate)
+        .eq('keywords.market', market);
+
+      if (prevRows) {
+        const fromSnapshotIds = prevRows.map((r: any) => r.id);
+        const { data: prevCompRows } = await supabase
+          .from('competitor_positions')
+          .select('snapshot_id, competitor_name, position')
+          .in('snapshot_id', fromSnapshotIds);
+
+        const prevCompBySnapshot: Record<number, Record<string, number | null>> = {};
+        for (const c of prevCompRows || []) {
+          if (!prevCompBySnapshot[c.snapshot_id]) prevCompBySnapshot[c.snapshot_id] = {};
+          prevCompBySnapshot[c.snapshot_id][c.competitor_name] = c.position;
+        }
+
+        for (const r of prevRows) {
+          const kw = (r as any).keywords?.keyword;
+          if (!kw) continue;
+          fromByKeyword[kw] = {
+            pos_dedecker: r.pos_dedecker,
+            has_ai: r.has_ai,
+            dedecker_in_ai: r.dedecker_in_ai,
+            competitors: prevCompBySnapshot[r.id] || {},
+          };
+        }
+      }
+    }
+
+    // 5. Build response with deltas
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = serpRows.map((r: any) => {
       const pos = r.pos_dedecker as number | null;
       const snapshotId = r.snapshot_id || r.id;
       const competitors = compBySnapshot[snapshotId as number] || {};
-      return {
+      const prev = fromByKeyword[r.keyword] || null;
+
+      const row: Record<string, unknown> = {
         keyword: r.keyword,
         volume: r.volume || 0,
         category: r.category || 'Non catégorisé',
@@ -106,44 +166,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         scan_date: r.scan_date,
         ...competitors,
       };
-    });
 
-    // 5. Fetch previous scan date for comparison (if exists)
-    const { data: allDates } = await supabase
-      .from('serp_snapshots')
-      .select('scan_date, keywords!inner(market)')
-      .eq('keywords.market', market)
-      .order('scan_date', { ascending: false });
+      if (prev) {
+        row.pos_prev = prev.pos_dedecker ?? null;
+        row.delta = calcDelta(pos, prev.pos_dedecker);
+        row.has_ai_prev = prev.has_ai ?? false;
+        row.dedecker_in_ai_prev = prev.dedecker_in_ai ?? false;
 
-    const uniqueDates = [...new Set((allDates || []).map((r: { scan_date: string }) => r.scan_date))];
-    const currentDate = uniqueDates[0];
-    const prevDate = uniqueDates[1] || null;
+        for (const [name, prevPos] of Object.entries(prev.competitors as Record<string, number | null>)) {
+          const curPos = competitors[name] ?? null;
+          row[`${name}_prev`] = prevPos ?? null;
+          row[`${name}_delta`] = calcDelta(curPos as number | null, prevPos as number | null);
+        }
 
-    let prevByKeyword: Record<string, number | null> = {};
-    if (prevDate) {
-      const { data: prevRows } = await supabase
-        .from('serp_snapshots')
-        .select('pos_dedecker, keywords!inner(keyword, market)')
-        .eq('scan_date', prevDate)
-        .eq('keywords.market', market);
-
-      for (const r of prevRows || []) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const keyword = (r as any).keywords?.keyword;
-        if (keyword) prevByKeyword[keyword] = r.pos_dedecker;
+        // Also track competitors that exist now but not before
+        for (const [name, curPos] of Object.entries(competitors)) {
+          if (!(name in prev.competitors)) {
+            row[`${name}_prev`] = null;
+            row[`${name}_delta`] = null;
+          }
+        }
       }
-    }
 
-    // 6. Add delta to each row
-    const dataWithDelta = data.map((row) => {
-      const posPrev = prevByKeyword[row.keyword] ?? null;
-      const delta = row.pos_dedecker != null && posPrev != null
-        ? posPrev - row.pos_dedecker  // positive = improved (lower rank number)
-        : null;
-      return { ...row, pos_prev: posPrev, delta };
+      return row;
     });
 
-    return res.status(200).json({ data: dataWithDelta, compMap, scanDate: currentDate, prevDate });
+    return res.status(200).json({
+      data,
+      compMap,
+      scanDate: toDate || null,
+      fromDate,
+      toDate,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('Supabase error:', msg);

@@ -7,6 +7,7 @@ import CategoryChart from '../components/CategoryChart';
 import CompetitorChart from '../components/CompetitorChart';
 import AIOverviewChart from '../components/AIOverviewChart';
 import KeywordTable from '../components/KeywordTable';
+import DateRangePicker from '../components/DateRangePicker';
 
 const BRANDING_CATS = new Set(['Branding', 'Marque et valeurs']);
 
@@ -19,7 +20,8 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [globalCat, setGlobalCat] = useState('All');
   const [availableDates, setAvailableDates] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
   const [prevDate, setPrevDate] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,27 +37,34 @@ export default function Dashboard() {
       .then((json) => {
         const dates: string[] = json.dates || [];
         setAvailableDates(dates);
-        setSelectedDate(dates[0] || '');
+        if (dates.length > 0) {
+          setToDate(dates[0]);
+          setFromDate(dates[1] || dates[0]);
+        } else {
+          setToDate('');
+          setFromDate('');
+        }
       })
       .catch(() => setAvailableDates([]));
   }, [market]);
 
   useEffect(() => {
+    if (!fromDate || !toDate) return;
     setLoading(true);
     setError(null);
     setGlobalCat('All');
-    const dateQuery = selectedDate ? `&date=${selectedDate}` : '';
+    const dateQuery = `&from=${fromDate}&to=${toDate}`;
     fetch(`/api/data?market=${market}${dateQuery}`)
       .then((r) => r.json())
       .then((json) => {
         if (json.error) { setError(json.error); setLoading(false); return; }
         setRawData(json.data);
         setCompMap(json.compMap);
-        setPrevDate(json.prevDate || null);
+        setPrevDate(json.fromDate || null);
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
-  }, [market, selectedDate]);
+  }, [market, fromDate, toDate]);
 
   const categories = useMemo(() => {
     if (!rawData) return [];
@@ -87,21 +96,13 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {availableDates.length > 1 && (
-              <select
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="border border-stone-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-taupe"
-              >
-                {availableDates.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            )}
-            {availableDates.length === 1 && (
-              <span className="text-xs text-stone-400 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200">
-                📅 {selectedDate}
-              </span>
+            {availableDates.length > 0 && (
+              <DateRangePicker
+                availableDates={availableDates}
+                fromDate={fromDate}
+                toDate={toDate}
+                onChange={(from, to) => { setFromDate(from); setToDate(to); }}
+              />
             )}
             <select
               value={market}
@@ -155,11 +156,11 @@ export default function Dashboard() {
 
           {!loading && !error && filteredData.length > 0 && (
             <>
-              <KPICards data={filteredData} />
-              <CategoryChart data={filteredData} />
-              <CompetitorChart data={filteredData} compMap={compMap} />
-              <AIOverviewChart data={filteredData} />
-              <KeywordTable data={filteredData} compMap={compMap} prevDate={prevDate} />
+              <KPICards data={filteredData} fromDate={fromDate} toDate={toDate} />
+              <CategoryChart data={filteredData} fromDate={fromDate} toDate={toDate} />
+              <CompetitorChart data={filteredData} compMap={compMap} fromDate={fromDate} toDate={toDate} />
+              <AIOverviewChart data={filteredData} fromDate={fromDate} toDate={toDate} />
+              <KeywordTable data={filteredData} compMap={compMap} fromDate={fromDate} toDate={toDate} />
             </>
           )}
         </div>

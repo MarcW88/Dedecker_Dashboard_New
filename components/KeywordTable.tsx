@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import { Row, CompMap } from '@/lib/types';
 
-function DeltaBadge({ delta }: { delta: number | null | undefined }) {
+function DeltaBadge({ delta, mini }: { delta: number | null | undefined; mini?: boolean }) {
   if (delta == null) return <span className="text-stone-300">—</span>;
-  if (delta === 0) return <span className="text-stone-400 text-xs">=</span>;
-  if (delta > 0) return <span className="text-green-600 text-xs font-medium">▲{delta}</span>;
-  return <span className="text-red-400 text-xs font-medium">▼{Math.abs(delta)}</span>;
+  if (delta === 0) return <span className={`text-stone-400 ${mini ? 'text-[10px]' : 'text-xs'}`}>=</span>;
+  if (delta > 0) return <span className={`text-green-600 font-medium ${mini ? 'text-[10px]' : 'text-xs'}`}>▲{delta}</span>;
+  return <span className={`text-red-400 font-medium ${mini ? 'text-[10px]' : 'text-xs'}`}>▼{Math.abs(delta)}</span>;
 }
 
 function posStyle(val: number | null | undefined | unknown): string {
@@ -18,7 +18,7 @@ function posStyle(val: number | null | undefined | unknown): string {
   return 'bg-red-50 text-red-400';
 }
 
-export default function KeywordTable({ data, compMap, prevDate }: { data: Row[]; compMap: CompMap; prevDate?: string | null }) {
+export default function KeywordTable({ data, compMap, fromDate, toDate }: { data: Row[]; compMap: CompMap; fromDate?: string; toDate?: string }) {
   const [search, setSearch] = useState('');
   const [filterBucket, setFilterBucket] = useState('All');
   const [filterAI, setFilterAI] = useState('All');
@@ -47,7 +47,7 @@ export default function KeywordTable({ data, compMap, prevDate }: { data: Row[];
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
 
   const csvDownload = () => {
-    const headers = ['keyword', 'volume', 'category', 'pos_dedecker', ...allComp, 'has_ai', 'dedecker_in_ai'];
+    const headers = ['keyword', 'volume', 'category', 'pos_dedecker', 'pos_prev', 'delta', ...allComp.flatMap((c) => [c, `${c}_prev`, `${c}_delta`]), 'has_ai', 'dedecker_in_ai'];
     const rows = [headers.join(','), ...filtered.map((r) => headers.map((h) => JSON.stringify(r[h] ?? '')).join(','))];
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'dedecker_keywords.csv'; a.click();
@@ -84,8 +84,8 @@ export default function KeywordTable({ data, compMap, prevDate }: { data: Row[];
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-stone-100 bg-stone-50">
-              {['Keyword', 'Vol', 'Category', 'DeDecker', ...(prevDate ? ['vs prev'] : []), ...allComp, 'AI', 'In AI'].map((h) => (
-                <th key={h} className="text-left py-2.5 px-3 text-stone-500 font-medium whitespace-nowrap">{h}</th>
+              {['Keyword', 'Vol', 'Category', 'DeDecker', fromDate !== toDate ? 'vs prev' : '', ...allComp.flatMap((c) => [c, fromDate !== toDate ? 'Δ' : '']), 'AI', 'In AI'].filter(Boolean).map((h, i) => (
+                <th key={`${h}-${i}`} className="text-left py-2.5 px-3 text-stone-500 font-medium whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
@@ -99,19 +99,31 @@ export default function KeywordTable({ data, compMap, prevDate }: { data: Row[];
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${posStyle(r.pos_dedecker)}`}>
                     {r.pos_dedecker ?? '—'}
                   </span>
+                  {fromDate !== toDate && r.pos_prev != null && (
+                    <span className="block text-[10px] text-stone-400 mt-0.5">
+                      was {r.pos_prev}
+                    </span>
+                  )}
                 </td>
-                {prevDate && (
+                {fromDate !== toDate && (
                   <td className="py-2 px-3 text-center">
                     <DeltaBadge delta={r.delta as number | null} />
                   </td>
                 )}
-                {allComp.map((c) => (
+                {allComp.flatMap((c) => [
                   <td key={c} className="py-2 px-3">
                     <span className={`px-2 py-0.5 rounded text-xs ${posStyle(r[c])}`}>
                       {(r[c] as string | number | null) ?? '—'}
                     </span>
-                  </td>
-                ))}
+                  </td>,
+                  ...(fromDate !== toDate
+                    ? [
+                        <td key={`${c}-delta`} className="py-2 px-3 text-center">
+                          <DeltaBadge mini delta={(r as Record<string, unknown>)[`${c}_delta`] as number | null} />
+                        </td>
+                      ]
+                    : []),
+                ])}
                 <td className="py-2 px-3">
                   {r.has_ai ? <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" title="AI Overview" /> : '—'}
                 </td>
