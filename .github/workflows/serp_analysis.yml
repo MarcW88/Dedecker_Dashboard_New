@@ -19,6 +19,14 @@ on:
         description: 'Scan date (YYYY-MM-DD, leave empty for today)'
         required: false
         default: ''
+      force:
+        description: 'Re-scan keywords already in Supabase'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   serp-analysis:
@@ -48,11 +56,15 @@ jobs:
         run: |
           MARKET="${{ github.event.inputs.market || 'ALL' }}"
           DATE_ARG="${{ github.event.inputs.date }}"
+          FORCE_ARG=""
+          if [ "${{ github.event.inputs.force }}" == "true" ]; then
+            FORCE_ARG="--force"
+          fi
           
           if [ -n "$DATE_ARG" ]; then
-            python scripts/serp_to_supabase.py --market "$MARKET" --date "$DATE_ARG"
+            python scripts/serp_to_supabase.py --market "$MARKET" --date "$DATE_ARG" $FORCE_ARG
           else
-            python scripts/serp_to_supabase.py --market "$MARKET"
+            python scripts/serp_to_supabase.py --market "$MARKET" $FORCE_ARG
           fi
 
       - name: Summary

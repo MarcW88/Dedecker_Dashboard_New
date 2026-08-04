@@ -24,6 +24,8 @@ export default function KeywordTable({ data, compMap, fromDate, toDate }: { data
   const [filterAI, setFilterAI] = useState('All');
   const [filterCat, setFilterCat] = useState('All');
   const [page, setPage] = useState(0);
+  const [sortField, setSortField] = useState<string>('volume');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const PAGE_SIZE = 50;
 
   const categories = useMemo(() => ['All', ...new Set(data.map((r) => r.category).filter(Boolean))].sort() as string[], [data]);
@@ -40,8 +42,18 @@ export default function KeywordTable({ data, compMap, fromDate, toDate }: { data
     if (filterAI === 'With AI Overview') rows = rows.filter((r) => r.has_ai);
     else if (filterAI === 'DeDecker in AI') rows = rows.filter((r) => r.dedecker_in_ai);
     else if (filterAI === 'AI Gap') rows = rows.filter((r) => r.has_ai && !r.dedecker_in_ai);
-    return rows.sort((a, b) => (b.volume || 0) - (a.volume || 0));
-  }, [data, search, filterBucket, filterAI, filterCat]);
+    return rows.sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      let aVal: number | string = 0;
+      let bVal: number | string = 0;
+      if (sortField === 'volume') { aVal = a.volume || 0; bVal = b.volume || 0; }
+      else if (sortField === 'keyword') { aVal = a.keyword.toLowerCase(); bVal = b.keyword.toLowerCase(); }
+      else if (sortField === 'pos_dedecker') { aVal = a.pos_dedecker ?? 1000; bVal = b.pos_dedecker ?? 1000; }
+      else { aVal = (a as Record<string, unknown>)[sortField] as number | null ?? 1000; bVal = (b as Record<string, unknown>)[sortField] as number | null ?? 1000; }
+      if (typeof aVal === 'string' && typeof bVal === 'string') return aVal.localeCompare(bVal) * dir;
+      return (Number(aVal) - Number(bVal)) * dir;
+    });
+  }, [data, search, filterBucket, filterAI, filterCat, sortField, sortDir]);
 
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -77,6 +89,23 @@ export default function KeywordTable({ data, compMap, fromDate, toDate }: { data
             {f.opts.map((o) => <option key={o}>{o}</option>)}
           </select>
         ))}
+        <select value={sortField} onChange={(e) => { setSortField(e.target.value); setPage(0); }}
+          className="border border-stone-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-taupe bg-white">
+          {[
+            { key: 'volume', label: 'Volume' },
+            { key: 'keyword', label: 'Keyword' },
+            { key: 'pos_dedecker', label: 'DeDecker' },
+            ...allComp.map((c) => ({ key: c, label: c })),
+          ].map((o) => (
+            <option key={o.key} value={o.key}>{o.label}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); setPage(0); }}
+          className="border border-stone-200 rounded-lg px-3 py-1.5 text-xs hover:bg-stone-50"
+        >
+          {sortDir === 'asc' ? '↑ Asc' : '↓ Desc'}
+        </button>
         <span className="text-xs text-stone-400 self-center">{filtered.length} keywords</span>
       </div>
 

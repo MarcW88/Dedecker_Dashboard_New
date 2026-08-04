@@ -39,13 +39,13 @@ MARKETS = {
         "location_code": 2056,
         "language_code": "nl",
         "competitors": {
-            "default": ["vika.be", "dsmkeukens.be", "cuisinesdovy.be", "diapal.be"],
+            "default": ["vika.be", "dsmkeukens.be", "dovykeukens.be", "diapal.be"],
             "Badkamers": ["groepwouters.be", "debbadbeke.be", "x2o.be", "facq.be", "vanmarcke.be"],
         },
         "comp_names": {
             "vika.be": "Vika",
             "dsmkeukens.be": "DSM Keukens",
-            "cuisinesdovy.be": "Dovy",
+            "dovykeukens.be": "Dovy",
             "diapal.be": "Diapal",
             "groepwouters.be": "Groep Wouters",
             "debbadbeke.be": "De Badbeke",
@@ -58,11 +58,11 @@ MARKETS = {
         "location_code": 2056,
         "language_code": "fr",
         "competitors": {
-            "default": ["cuisinesdovy.be", "ixina.be", "vandenborrekitchen.be", "dsmcuisines.be"],
+            "default": ["dovykeukens.be", "ixina.be", "vandenborrekitchen.be", "dsmcuisines.be"],
             "Salle de bains": ["sanijura.fr", "mobalpa.com", "x2o.be", "facq.be", "vanmarcke.be"],
         },
         "comp_names": {
-            "cuisinesdovy.be": "Dovy",
+            "dovykeukens.be": "Dovy",
             "ixina.be": "Ixina",
             "vandenborrekitchen.be": "Vandenborre",
             "dsmcuisines.be": "DSM Cuisines",
@@ -161,7 +161,7 @@ def analyze_serp(keyword: str, market_cfg: dict) -> dict:
     return output
 
 
-def run_market(market: str, supabase, scan_date: str, dry_run: bool = False):
+def run_market(market: str, supabase, scan_date: str, dry_run: bool = False, force: bool = False):
     market_cfg = MARKETS[market]
     print(f"\n{'='*60}")
     print(f"📍 Market: {market} | Date: {scan_date}")
@@ -176,9 +176,26 @@ def run_market(market: str, supabase, scan_date: str, dry_run: bool = False):
         print("⚠️  No keywords found, skipping.")
         return
 
-    # 1b. Skip keywords already scanned today
-    already = supabase.table("serp_snapshots").select("keyword_id").eq("scan_date", scan_date).execute()
-    done_ids = {r["keyword_id"] for r in already.data or []}
+    # 1b. Skip keywords already scanned today (unless force mode)
+    kw_ids = {k["id"] for k in keywords}
+    already = supabase.table("serp_snapshots").select("id, keyword_id").eq("scan_date", scan_date).execute()
+    existing_by_kw = {r["keyword_id"]: r["id"] for r in already.data or [] if r["keyword_id"] in kw_ids}
+
+    if force and not dry_run and existing_by_kw:
+        print(f"🗑️  Force mode: deleting {len(existing_by_kw)} existing snapshots for {market} {scan_date}")
+        existing_ids = list(existing_by_kw.values())
+        # delete competitor positions first, then snapshots
+        try:
+            supabase.table("competitor_positions").delete().in_("snapshot_id", existing_ids).execute()
+        except Exception as e:
+            print(f"   ⚠️ Could not delete competitor_positions: {e}")
+        try:
+            supabase.table("serp_snapshots").delete().in_("id", existing_ids).execute()
+        except Exception as e:
+            print(f"   ⚠️ Could not delete serp_snapshots: {e}")
+        existing_by_kw = {}
+
+    done_ids = set(existing_by_kw.keys())
     keywords = [k for k in keywords if k["id"] not in done_ids]
     print(f"⏭️  {len(done_ids)} already scanned for {scan_date}, {len(keywords)} remaining")
 
@@ -235,6 +252,7 @@ def main():
     parser.add_argument("--market", choices=["BENL", "BEFR", "ALL"], default="ALL")
     parser.add_argument("--date", default=str(date.today()), help="Scan date (YYYY-MM-DD)")
     parser.add_argument("--dry-run", action="store_true", help="Skip API calls, test DB connection only")
+    parser.add_argument("--force", action="store_true", help="Re-scan keywords already in Supabase for this date")
     args = parser.parse_args()
 
     # Validate env vars
@@ -252,7 +270,7 @@ def main():
     markets_to_run = ["BENL", "BEFR"] if args.market == "ALL" else [args.market]
 
     for market in markets_to_run:
-        run_market(market, supabase, args.date, dry_run=args.dry_run)
+        run_market(market, supabase, args.date, dry_run=args.dry_run, force=args.force)
 
     print("\n🎉 All done!")
 

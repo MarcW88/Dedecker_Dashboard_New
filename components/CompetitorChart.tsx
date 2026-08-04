@@ -39,6 +39,17 @@ export default function CompetitorChart({ data, compMap, fromDate, toDate }: { d
       'Avg Pos': data.filter((r) => r.pos_dedecker != null).length > 0
         ? data.reduce((s, r) => s + (r.pos_dedecker != null ? r.pos_dedecker : 0), 0) / data.filter((r) => r.pos_dedecker != null).length
         : 0,
+      'Avg Pos prev': data.filter((r) => r.pos_prev != null).length > 0
+        ? data.reduce((s, r) => s + (r.pos_prev != null ? r.pos_prev : 0), 0) / data.filter((r) => r.pos_prev != null).length
+        : null,
+      deltaAvgPos: compare
+        ? (data.filter((r) => r.pos_prev != null).length > 0
+          ? data.reduce((s, r) => s + (r.pos_prev != null ? r.pos_prev : 0), 0) / data.filter((r) => r.pos_prev != null).length
+          : 0) -
+          (data.filter((r) => r.pos_dedecker != null).length > 0
+          ? data.reduce((s, r) => s + (r.pos_dedecker != null ? r.pos_dedecker : 0), 0) / data.filter((r) => r.pos_dedecker != null).length
+          : 0)
+        : null,
       deltaRanked: compare
         ? data.filter((r) => r.pos_dedecker != null).length - data.filter((r) => r.pos_prev != null).length
         : null,
@@ -57,6 +68,17 @@ export default function CompetitorChart({ data, compMap, fromDate, toDate }: { d
         'Avg Pos': data.filter((r) => r[c] != null).length > 0
           ? data.reduce((s, r) => s + ((r[c] as number | null) ?? 0), 0) / data.filter((r) => r[c] != null).length
           : 0,
+        'Avg Pos prev': data.filter((r) => ((r as Record<string, unknown>)[`${c}_prev`] as number | null) != null).length > 0
+          ? data.reduce((s, r) => s + (((r as Record<string, unknown>)[`${c}_prev`] as number | null) ?? 0), 0) / data.filter((r) => ((r as Record<string, unknown>)[`${c}_prev`] as number | null) != null).length
+          : null,
+        deltaAvgPos: compare
+          ? (data.filter((r) => ((r as Record<string, unknown>)[`${c}_prev`] as number | null) != null).length > 0
+            ? data.reduce((s, r) => s + (((r as Record<string, unknown>)[`${c}_prev`] as number | null) ?? 0), 0) / data.filter((r) => ((r as Record<string, unknown>)[`${c}_prev`] as number | null) != null).length
+            : 0) -
+            (data.filter((r) => r[c] != null).length > 0
+            ? data.reduce((s, r) => s + ((r[c] as number | null) ?? 0), 0) / data.filter((r) => r[c] != null).length
+            : 0)
+          : null,
         deltaRanked: compare ? curRanked - prevRanked : null,
         deltaTop10: compare
           ? data.filter((r) => (r[c] as number) <= 10).length - data.filter((r) => ((r as Record<string, unknown>)[`${c}_prev`] as number | null) != null && ((r as Record<string, unknown>)[`${c}_prev`] as number) <= 10).length
@@ -94,7 +116,7 @@ export default function CompetitorChart({ data, compMap, fromDate, toDate }: { d
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-stone-100">
-                {['Competitor', `Ranked / ${total}`, compare ? 'Δ' : '', 'Ranked %', `Top 10 / ${total}`, compare ? 'Δ' : '', 'Avg Pos'].filter(Boolean).map((h, i) => (
+                {['Competitor', `Ranked / ${total}`, compare ? 'Δ' : '', 'Ranked %', `Top 10 / ${total}`, compare ? 'Δ' : '', 'Avg Pos', compare ? 'Δ' : ''].filter(Boolean).map((h, i) => (
                   <th key={`${h}-${i}`} className="text-left py-2 px-2 text-stone-500 font-medium">{h}</th>
                 ))}
               </tr>
@@ -120,6 +142,11 @@ export default function CompetitorChart({ data, compMap, fromDate, toDate }: { d
                     </td>
                   )}
                   <td className="py-1.5 px-2">{r['Avg Pos'] ? (r['Avg Pos'] as number).toFixed(1) : '—'}</td>
+                  {compare && (
+                    <td className="py-1.5 px-2">
+                      <DeltaCell delta={r.deltaAvgPos as number | null} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
