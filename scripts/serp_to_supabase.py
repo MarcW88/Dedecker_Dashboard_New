@@ -58,11 +58,11 @@ MARKETS = {
         "location_code": 2056,
         "language_code": "fr",
         "competitors": {
-            "default": ["dovykeukens.be", "ixina.be", "vandenborrekitchen.be", "dsmcuisines.be"],
+            "default": ["cuisinesdovy.be", "ixina.be", "vandenborrekitchen.be", "dsmcuisines.be"],
             "Salle de bains": ["sanijura.fr", "mobalpa.com", "x2o.be", "facq.be", "vanmarcke.be"],
         },
         "comp_names": {
-            "dovykeukens.be": "Dovy",
+            "cuisinesdovy.be": "Dovy",
             "ixina.be": "Ixina",
             "vandenborrekitchen.be": "Vandenborre",
             "dsmcuisines.be": "DSM Cuisines",
