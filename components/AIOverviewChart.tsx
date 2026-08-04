@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface DonutChartProps { title: string; data: { name: string; value: number }[]; colors: string[]; }
 interface Row { keyword: string; volume?: number; category?: string; has_ai?: boolean; dedecker_in_ai?: boolean; pos_dedecker?: number | null; [key: string]: unknown; }
+
+const AI_PAGE_SIZE = 8;
 
 function DonutChart({ title, data, colors }: DonutChartProps) {
   return (
@@ -27,10 +30,12 @@ export default function AIOverviewChart({ data, fromDate, toDate }: { data: Row[
   const inAI = data.filter((r: Row) => r.dedecker_in_ai).length;
   const notInAI = withAI - inAI;
 
-  const aiKeywords = data
+  const allAiKeywords = data
     .filter((r: Row) => r.has_ai)
-    .sort((a: Row, b: Row) => (b.volume || 0) - (a.volume || 0))
-    .slice(0, 50);
+    .sort((a: Row, b: Row) => (b.volume || 0) - (a.volume || 0));
+  const [aiPage, setAiPage] = useState(0);
+  const aiTotalPages = Math.max(1, Math.ceil(allAiKeywords.length / AI_PAGE_SIZE));
+  const aiKeywords = allAiKeywords.slice(aiPage * AI_PAGE_SIZE, (aiPage + 1) * AI_PAGE_SIZE);
 
   return (
     <div className="mb-6">
@@ -53,7 +58,9 @@ export default function AIOverviewChart({ data, fromDate, toDate }: { data: Row[
           colors={['#8B7355', '#c9a59a']}
         />
         <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm overflow-auto">
-          <h4 className="text-xs text-stone-500 font-medium mb-2">Top AI Keywords</h4>
+          <h4 className="text-xs text-stone-500 font-medium mb-2">
+            Top AI Keywords ({Math.min(allAiKeywords.length, AI_PAGE_SIZE)} / {allAiKeywords.length})
+          </h4>
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-stone-100">
@@ -77,6 +84,27 @@ export default function AIOverviewChart({ data, fromDate, toDate }: { data: Row[
               ))}
             </tbody>
           </table>
+          {aiTotalPages > 1 && (
+            <div className="flex items-center justify-between mt-3 text-xs text-stone-500">
+              <button
+                onClick={() => setAiPage((p) => Math.max(0, p - 1))}
+                disabled={aiPage === 0}
+                className="px-2.5 py-1 border border-stone-200 rounded-lg disabled:opacity-40 hover:bg-stone-50"
+              >
+                ← Prev
+              </button>
+              <span>
+                Page {aiPage + 1} / {aiTotalPages}
+              </span>
+              <button
+                onClick={() => setAiPage((p) => Math.min(aiTotalPages - 1, p + 1))}
+                disabled={aiPage === aiTotalPages - 1}
+                className="px-2.5 py-1 border border-stone-200 rounded-lg disabled:opacity-40 hover:bg-stone-50"
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
